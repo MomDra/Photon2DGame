@@ -45,6 +45,16 @@ public class PlayerController : MonoBehaviourPunCallbacks, IPunObservable
             pv.RPC("FlipXRPC", RpcTarget.AllBuffered, axis);
         }
         else animator.SetBool("walk", false);
+
+        isGround = Physics2D.OverlapCircle((Vector2)transform.position + new Vector2(0, -0.5f), 0.07f, 1 << LayerMask.NameToLayer("Ground"));
+        animator.SetBool("jump", !isGround);
+        if (Input.GetKeyDown(KeyCode.W) && isGround) pv.RPC("JumpRPC", RpcTarget.All);
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            PhotonNetwork.Instantiate("Bullet", transform.position + new Vector3(sr.flipX ? -0.4f : 0.4f, -0.11f, 0), Quaternion.identity).GetComponent<PhotonView>().RPC("DirRPC", RpcTarget.All, sr.flipX ? -1 : 1);
+            animator.SetTrigger("shot");
+        }
     }
 
     private void FixedUpdate()
@@ -60,8 +70,39 @@ public class PlayerController : MonoBehaviourPunCallbacks, IPunObservable
         sr.flipX = axis == -1;
     }
 
+    [PunRPC]
+    private void JumpRPC()
+    {
+        rb.velocity = Vector2.zero;
+        rb.AddForce(Vector2.up * 700);
+    }
+
+    [PunRPC]
+    private void DestroyRPC()
+    {
+        Destroy(gameObject);
+    }
+
     public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
     {
+        if (stream.IsWriting)
+        {
+            stream.SendNext(healthImage.fillAmount);
+        }
+        else
+        {
+            healthImage.fillAmount = (float)stream.ReceiveNext();
+            Debug.Log("Receive");
+        }
+    }
 
+    public void Hit()
+    {
+        healthImage.fillAmount -= 0.1f;
+        if (healthImage.fillAmount <= 0)
+        {
+            GameObject.Find("Canvas").transform.Find("RespawnPanel").gameObject.SetActive(true);
+            pv.RPC("DestroyRPC", RpcTarget.AllBuffered);
+        }
     }
 }
